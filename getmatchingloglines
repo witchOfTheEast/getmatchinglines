@@ -1,0 +1,87 @@
+#!/bin/bash
+
+iplistfile=''
+target_ip=''
+logfile=''
+scriptname=$(basename "$0")
+
+ipregex=^[0-9]{,3}\(\\.[0-9]{,3}\){,3}$
+
+invalid_ips=()
+
+usage () {
+    echo -e "\nUsage: $scriptname -f IPLISTFILE LOGFILE\nUsage: $scriptname -i IPADDRESS LOGFILE\nUsage: $scriptname -h  (print usage information)\n\n This command will grep through the supplied LOGFILE looking for either the single IPADDRESS or each IPADDRESS supplied in the IPLISTFILE.\n\nAn IPLISTFILE the file should contain a one IPADDRESS per line.\n\nNote: Nothing will stop you from seaching invalid IPs like 999.999.999.999";
+exit 1;
+}
+
+while getopts ":i:f:h" opt; do
+    case $opt in
+        i)
+            if [[ "$OPTARG" =~ $ipregex ]]; then
+                target_ip="$OPTARG";
+            else
+                echo -e "\n''$OPTARG'' doesn't seem like an IP address. Please try again.";
+                usage;
+            fi;
+            ;;
+        f)
+            if [[ -f "$OPTARG" ]]; then
+                iplistfile="$OPTARG";
+            else 
+                echo -e "\n''$OPTARG'' doesn't appear to be a valid file. Please try again.";
+                usage;
+            fi;
+            ;;
+        h)
+            usage;
+            ;;
+        \?)
+            echo -e "\nInvalid: -$OPTARG" >&2
+            usage;
+            ;;
+        :)
+            echo -e "\nOption -$OPTARG requires argument" >&2
+            usage;
+            ;;
+    esac
+done
+
+shift $((OPTIND -1))
+
+if [[ "$#" != 1 ]]; then
+    echo -e "\nMissing a flag or missing LOGFILE. Please try again.";
+    usage;
+elif [[ ! -f "$1" ]]; then
+    echo -e "\n''$1'' doesn't seem to be a valid file. Please try again."
+    usage;
+else
+    logfile="$1";
+fi
+
+if [[ ! "$iplistfile" == '' ]] && [[ ! "$target_ip" == '' ]]; then
+    echo "Use just one of [-i IP] or [-f IPLISTFILE] at a time. Please try again.";
+    usage;
+elif [[ ! "$iplistfile" == '' ]]; then
+    while read line; do
+        if [[ ! $line =~ $ipregex ]]; then
+            found_invalid_ips=1;
+            invalid_ips+=($line);
+        else
+            clean_line="$(echo "$line" | sed 's/\./\\\./g')";
+            grep "$clean_line" "$logfile";
+        fi
+    done < "$iplistfile";   
+
+    if [[ $found_invalid_ips == 1 ]]; then
+        echo -e "\nWARNING: non-valid lines found in $iplistfile\n=================================" >&2;
+        for i in ${invalid_ips[@]}; do
+            echo -e "$i" >&2;
+        done;
+        echo -e "=================================" >&2;
+    fi
+elif [[ ! "$target_ip" == '' ]]; then
+    clean_ip="$(echo "$target_ip" | sed 's/\./\\\./g')"
+    grep "$clean_ip" "$logfile";
+fi;
+
+
